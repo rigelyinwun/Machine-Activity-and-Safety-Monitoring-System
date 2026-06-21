@@ -56,6 +56,10 @@ model = YOLO("yolov8n.pt")
 print("[System] Initializing webcam video stream...")
 cap = cv2.VideoCapture(0) 
 
+# set frame resolution to 640 x 480 for optimization
+cap.set(3, 640)
+cap.set(4, 480)
+
 if not cap.isOpened():
     print("[Error] Could not open or access the webcam device.")
     mqtt_client.loop_stop()

@@ -75,7 +75,7 @@ while True:
         break
 
     # Run inference filtering exclusively for 'person' (Class ID 0)
-    results = model(frame, verbose=False, classes=[0])
+    results = model(frame, verbose=False, conf=0.50, classes=[0]) # raise confidence level to 0.5
     person_detected = len(results[0].boxes) > 0
     
     # Plot standard bounding boxes and labels onto the frame

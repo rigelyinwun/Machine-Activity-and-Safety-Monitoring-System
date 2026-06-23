@@ -182,7 +182,7 @@ pip install opencv-python ultralytics paho-mqtt
 Run system:
 
 ```bash
-python edge_controller.py
+python cameraDetect.py
 ```
 
 ---

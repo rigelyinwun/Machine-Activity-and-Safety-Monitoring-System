@@ -72,16 +72,16 @@ An integrated, closed-loop industrial safety system that combines **Edge AI Comp
 
 ## Hardware Setup
 
-| Component                    | Pin              | Description                     |                   |
-| ---------------------------- | ---------------- | ------------------------------- | ----------------- |
-| ESP32 Dev Kit                | —                | Main controller                 |                   |
-| Vibration Sensor (SW-18010P) | GPIO 34          | Pulse-based vibration detection |                   |
-| Sound Sensor (KY-037)        | GPIO 35          | Analog sound input              |                   |
-| Buzzer (Active-Low)          | GPIO 13          | Alarm output                    |                   |
-| Red LED                      | GPIO 21          | Danger indicator                |                   |
-| Yellow LED                   | GPIO 22          | Warning indicator               |                   |
-| Green LED                    | GPIO 23          | Safe indicator                  |                   |
-| 4x4 Keypad                   | Rows: 17,5,18,19 | Columns: 15,2,4,16              | Maintenance input |
+| Component                    | Pin              | Description                     |
+| ---------------------------- | ---------------- | ------------------------------- |
+| ESP32 Dev Kit                | —                | Main controller                 |
+| Vibration Sensor (SW-18010P) | GPIO 34          | Pulse-based vibration detection |
+| Sound Sensor (KY-037)        | GPIO 35          | Analog sound input              |
+| Buzzer (Active-Low)          | GPIO 13          | Alarm output                    |
+| Red LED                      | GPIO 21          | Danger indicator                |
+| Yellow LED                   | GPIO 22          | Warning indicator               |
+| Green LED                    | GPIO 23          | Safe indicator                  |
+| 4x4 Keypad                   | Rows: 17,5,18,19; Columns: 15,2,4,16 | Maintenance input |
 
 ---
 

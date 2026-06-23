@@ -2,12 +2,13 @@
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
 #include <Keypad.h>
+#include "secrets.h"
 
 // --- Network Configuration ---
-const char* ssid = "Mewtwo-2.4G";             
-const char* password = "42_Health";     
-const char* mqtt_server = "192.168.0.3";      
-const int mqtt_port = 1883;
+const char* ssid = WIFI_SSID;
+const char* password = WIFI_PASSWORD;
+const char* mqtt_server = MQTT_SERVER;
+const int mqtt_port = MQTT_PORT;
 
 const char* topic_publish = "industrial/machine/telemetry";
 const char* topic_subscribe = "industrial/machine/control";
@@ -59,7 +60,7 @@ void setupWiFi() {
   Serial.println("\n✅ Wi-Fi Connected!");
 }
 
-// 📩 MQTT Callback (Silent Background Actions - Zero console spam!)
+// MQTT Callback (Silent Background Actions - Zero console spam!)
 void callback(char* topic, byte* payload, unsigned int length) {
   StaticJsonDocument<256> doc;
   deserializeJson(doc, payload, length);
@@ -123,7 +124,7 @@ void loop() {
 
   unsigned long currentMillis = millis();
 
-  // 🎹 1. REAL-TIME KEYPAD INTERCEPT BLOCK (Takes priority over timers)
+  // 1. REAL-TIME KEYPAD INTERCEPT BLOCK (Takes priority over timers)
   char key = keypad.getKey();
   if (key) {
     if (key == '#') {
@@ -164,7 +165,7 @@ void loop() {
     }
   }
 
-  // ⏱️ 2. AUTOMATED STATE CYCLE GENERATOR (Bypassed if user enters Maintenance Mode)
+  // 2. AUTOMATED STATE CYCLE GENERATOR (Bypassed if user enters Maintenance Mode)
   if (currentSystemState != STATE_MAINTENANCE) {
     if (currentMillis - lastStateChange >= stateDuration) {
       lastStateChange = currentMillis;
@@ -208,7 +209,7 @@ void loop() {
         Serial.println("\n... 🟡 [AUTOMATED STATE: YELLOW WARNING] Duration: 2s. Buzzer Muted.");
       }
 
-      // 📤 Network Transmission Block: Updates your Python WebCam GUI instantly every time the state changes
+      // Network Transmission Block: Updates your Python WebCam GUI instantly every time the state changes
       StaticJsonDocument<200> doc;
       doc["state"] = telemetryState;
       doc["vibration"] = (automatedTestStep == 0) ? 999 : 20;

@@ -1,20 +1,22 @@
 import cv2
 import json
 import time
+from dotenv import load_dotenv, dotenv_values
 from ultralytics import YOLO
 import paho.mqtt.client as mqtt
 
-# --- Configuration Settings ---
-MQTT_BROKER = "192.168.0.3"  # Your laptop's IPv4 address
-MQTT_PORT = 1883
+load_dotenv()
+_env = dotenv_values(".env")
+MQTT_BROKER = _env.get("MQTT_BROKER")
+MQTT_PORT = int(_env.get("MQTT_PORT", 1883))
 TOPIC_SUB = "industrial/machine/telemetry"  # Listen to ESP32 data
 TOPIC_PUB = "industrial/machine/control"    # Send commands to ESP32
 
-# --- Rate Limiting Variables ---
+# Rate Limiting Variables
 PUBLISH_INTERVAL = 0.3  # Send data to ESP32 every 300 milliseconds (3 times a second)
 last_publish_time = 0.0
 
-# --- Shared Global Variables ---
+# Others Global Variables
 latest_machine_state = "NORMAL"
 latest_vibration = 0
 latest_sound = 0
@@ -34,7 +36,7 @@ def on_message(client, userdata, msg):
         print(f"[Error] Failed to parse telemetry packet: {e}")
 
 # Initialize MQTT Client Network Handshakes
-print("[System] Connecting to local Mosquitto Broker...")
+print(f"[System] Connecting to local Mosquitto Broker at {MQTT_BROKER}...")
 mqtt_client = mqtt.Client()
 mqtt_client.on_message = on_message
 
@@ -85,7 +87,6 @@ while True:
     # Plot standard bounding boxes and labels onto the frame
     annotated_frame = results[0].plot()
 
-    # --- CRITICAL REAL-TIME SAFETY LOGIC DECISION TREE ---
     if person_detected and latest_machine_state == "ABNORMAL":
         alarm_payload = {"alarm": True}
         overlay_text = "🚨 CRITICAL HAZARD: HUMAN IN DANGER ZONE! 🚨"
@@ -111,7 +112,7 @@ while True:
         mqtt_client.publish(TOPIC_PUB, json.dumps(alarm_payload))
         last_publish_time = current_time
 
-    # --- UI HUD RENDERING PIPELINE ---
+    # UI HUD RENDERING PIPELINE
     # Create a clean solid status banner block overlay at the top of the stream
     cv2.rectangle(annotated_frame, (0, 0), (frame.shape[1], 70), border_color, -1)
     

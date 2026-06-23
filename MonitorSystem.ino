@@ -3,16 +3,19 @@
 #include <ArduinoJson.h>
 #include <Keypad.h>
 
-// --- Network Configuration ---
-const char* ssid = "Mewtwo-2.4G";             // <--- Your Wi-Fi Name
-const char* password = "42_Health";           // <--- Your Wi-Fi Password
-const char* mqtt_server = "192.168.0.3";      // <--- Your Laptop's IPv4
-const int mqtt_port = 1883;
+// Network Configuration
+// Network credentials moved to secrets.h
+#include "secrets.h"
+
+const char* ssid = WIFI_SSID;             // Wi-Fi Name from secrets.h
+const char* password = WIFI_PASSWORD;     // Wi-Fi Password from secrets.h
+const char* mqtt_server = MQTT_SERVER;    // MQTT server from secrets.h
+const int mqtt_port = MQTT_PORT;
 
 const char* topic_publish = "industrial/machine/telemetry";
 const char* topic_subscribe = "industrial/machine/control";
 
-// --- YOUR PIN CONFIGURATIONS ---
+// Pin Configurations
 #define BUZZER_PIN 13
 #define Rled 21
 #define Yled 22
@@ -20,11 +23,10 @@ const char* topic_subscribe = "industrial/machine/control";
 #define VIB_Sensor 34
 #define SND_Sensor 35
 
-// --- INDUSTRIAL CALIBRATION PARAMETERS ---
 const int SOUND_THRESHOLD = 90;
 const int VIB_THRESHOLD = 10;
 
-// --- KEYPAD INTERFACE SETUP ---
+// Keypad Setup
 const byte ROWS = 4; 
 const byte COLS = 4; 
 char keys[ROWS][COLS] = {
@@ -39,11 +41,10 @@ byte colPins[COLS] = {15, 2, 4, 16};
 
 Keypad keypad = Keypad(makeKeymap(keys), rowPins, colPins, ROWS, COLS);
 
-// --- INDUSTRIAL FINITE STATE MACHINE STATES ---
 enum SystemState { STATE_IDLE, STATE_NORMAL, STATE_WARNING, STATE_ABNORMAL, STATE_MAINTENANCE };
 SystemState currentSystemState = STATE_NORMAL;
 
-// --- Safety Management Variables ---
+// Safety Management Variables
 const String PASS_MAINTENANCE = "123C"; 
 const String PASS_FIXED       = "789D";
 String inputPassword = "";               
@@ -54,7 +55,7 @@ bool currentPythonAlarmState = false;
 String lastPrintedState = "";
 unsigned long lastNetworkSendTime = 0;
 
-// --- CRITICAL FIX: Raw Vibration Tracking Registers ---
+// Raw Vibration Tracking Registers
 int lastVibState = HIGH;
 int vibrationCount = 0;
 int vibrationIntensity = 0; // Quantified Feature Extraction: Real events per second
@@ -143,15 +144,14 @@ void loop() {
   if (!client.connected()) { reconnectMQTT(); }
   client.loop();
 
-  // --- REAL-TIME EVENT SAMPLING ---
-  // Must execute continuously every loop cycle to intercept spring transitions
+  // Real-Time Vibration Event Detection & Counting (Executes every loop cycle)
   int vibState = digitalRead(VIB_Sensor);
   if (lastVibState == HIGH && vibState == LOW) {
     vibrationCount++; // Log a discrete spring compression strike against the outer post
   }
   lastVibState = vibState;
 
-  // KEYPAD MATRIX SCANNING INTERCEPT BLOCK
+  // Keypad Input Handling for Maintenance Override (Executes every loop cycle)
   char key = keypad.getKey();
   if (key) {
     if (key == '#') {
@@ -192,7 +192,7 @@ void loop() {
     }
   }
 
-  // TIMED DATA PROCESSING & TELEMETRY REGULATOR (Executes exactly every 1000ms)
+  // Timed Data Processing & Telemetry Regulator (Executes exactly every 1000ms)
   unsigned long currentMillis = millis();
   if (currentMillis - lastNetworkSendTime >= 1000) {
     lastNetworkSendTime = currentMillis;
@@ -208,7 +208,7 @@ void loop() {
     // Process output configurations unless locked under a maintenance override
     if (currentSystemState != STATE_MAINTENANCE) {
       
-      // A. COMPREHENSIVE INDUSTRIAL IDLE STATE
+      // A. IDLE STATE
       if (vibrationIntensity == 0 || sound == 0) {
         if (!overrideActive) {
           digitalWrite(Gled, LOW);
@@ -220,7 +220,7 @@ void loop() {
         currentConsoleLog = "[IDLE STATE] Vibration=" + String(vibrationIntensity) + " Hz | Sound=" + String(sound);
       }
       
-      // B. COMPREHENSIVE INDUSTRIAL SAFE STATE
+      // B. NORMAL SAFE STATE
       else if (vibrationIntensity < VIB_THRESHOLD && sound < SOUND_THRESHOLD) {
         if (!overrideActive) {
           digitalWrite(Yled, LOW);   
@@ -232,7 +232,7 @@ void loop() {
         currentConsoleLog = "[GREEN SAFE] Vibration=" + String(vibrationIntensity) + " Hz | Sound=" + String(sound);
       }
       
-      // C. COMPREHENSIVE INDUSTRIAL WARNING STATE
+      // C. WARNING STATE
       else if (vibrationIntensity > VIB_THRESHOLD && sound < SOUND_THRESHOLD) {
         if (!overrideActive) {
           digitalWrite(Yled, HIGH);   
@@ -244,7 +244,7 @@ void loop() {
         currentConsoleLog = "[YELLOW WARNING] Vibration=" + String(vibrationIntensity) + " Hz | Sound=" + String(sound);
       }
       
-      // D. COMPREHENSIVE INDUSTRIAL DANGER STATE
+      // D. ABNORMAL STATE
       else if (vibrationIntensity > 0 && sound > SOUND_THRESHOLD){
         if (!overrideActive) {
           digitalWrite(Yled, LOW);   
@@ -260,21 +260,21 @@ void loop() {
         currentConsoleLog = "Unknown State";
       }
 
-      // --- Safety Override Auto-Reset Protocol ---
+      // Safety Override Auto-Reset Protocol
       if (currentSystemState == STATE_NORMAL || currentSystemState == STATE_IDLE) {
         overrideActive = false; 
       }
 
-      // --- CONSOLE REPETITION FILTER ---
+      // Console Logging with State Change Detection (Prevents log flooding by only printing on state changes)
       if (currentConsoleLog != lastPrintedState) {
         Serial.println("\n" + currentConsoleLog);
         lastPrintedState = currentConsoleLog;
       }
 
-      // OUTBOUND NETWORK TELEMETRY TRANSMISSION (Sends extracted event data instead of raw noise)
+      // Outbound Network Telemetry Transmission (Sends extracted event data instead of raw noise)
       StaticJsonDocument<200> doc;
       doc["state"] = telemetryReportState;
-      doc["vibration"] = vibrationIntensity; // Delivers clean, actionable scalar frequency
+      doc["vibration"] = vibrationIntensity;
       doc["sound"] = sound;
 
       char jsonBuffer[256];

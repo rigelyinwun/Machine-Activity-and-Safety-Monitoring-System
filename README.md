@@ -1,128 +1,185 @@
 # Machine-Activity-and-Safety-Monitoring-System
 
-An integrated, closed-loop industrial safety system that combines **Computer Vision at the Edge** with an **IoT Hardware Node** to protect workers around hazardous machinery.
-
-The system uses a **multi-modal decision pipeline (Vision + Sensors)** to detect real threats and trigger alarms only when necessary — reducing false positives while maintaining real-time responsiveness.
+An integrated, closed-loop industrial safety system that combines **Edge AI Computer Vision** with an **ESP32-based IoT sensor node** to monitor machine conditions and protect personnel in real-time. The system uses a **multi-modal decision model (vibration + sound + vision)** to accurately classify machine states and trigger safety responses only when necessary.
 
 ---
 
 ## System Architecture & Workflow
 
-The system operates as a distributed Edge AI pipeline:
+### End-to-End Pipeline
 
-1. **Telemetry Generation (ESP32)**
+1. **Sensor Data Acquisition (ESP32)**
 
-   * Samples:
+   * Vibration sensor (SW-18010P) measures machine activity via pulse counting.
+   * Sound sensor (KY-037) captures acoustic intensity via ADC.
+   * Data is processed every **1000 ms**.
 
-     * Vibration sensor (GPIO 34, Digital)
-     * Sound sensor (GPIO 35, Analog)
-   * Uses non-blocking timing for continuous monitoring
+2. **State Classification (Embedded Logic)**
+   The ESP32 classifies machine condition into four states:
 
-2. **MQTT Communication Layer**
+   | State                 | Condition                                   | LED       |
+   | --------------------- | ------------------------------------------- | --------- |
+   | **IDLE**              | Vibration = 0 OR Sound = 0                  | All OFF   |
+   | **NORMAL (SAFE)**     | Vibration < threshold AND Sound < threshold | 🟢 Green  |
+   | **WARNING**           | Vibration > threshold AND Sound < threshold | 🟡 Yellow |
+   | **ABNORMAL (DANGER)** | Vibration > 0 AND Sound > threshold         | 🔴 Red    |
 
-   * Data serialized into JSON
-   * Published every **1000 ms**
-   * Topic: `industrial/machine/telemetry`
-   * Protocol: MQTT (TCP Port 1883)
+   ⚠️ Environmental noise is ignored when vibration = 0.
 
-3. **Edge AI Vision Processing**
+3. **MQTT Communication**
 
-   * Camera resolution: `640 × 480`
-   * Model: **YOLOv8n (Nano)**
-   * Inference speed: ~**9.5 FPS**
-   * Detection target: **Person (Class ID 0)**
-   * Confidence threshold: `0.50`
+   * Data is serialized into JSON:
 
-4. **Closed-Loop Decision Control**
+     ```json
+     { "state": "ABNORMAL", "vibration": 15, "sound": 120 }
+     ```
+   * Published to:
+
+     ```
+     industrial/machine/telemetry
+     ```
+   * Broker: **MQTT (Port 1883)**
+
+4. **Edge AI Vision Processing**
+
+   * Camera stream processed using **YOLOv8n**
+   * Resolution: **640×480**
+   * FPS: ~**9–10 FPS**
+   * Detects: **Person (Class 0)**
+
+5. **Closed-Loop Safety Control**
 
    * If:
 
-     * Person detected **AND**
-     * Machine state = `ABNORMAL`
+     * Machine = **ABNORMAL**
+     * AND Person detected
    * Then:
 
-     * Publish `{"alarm": true}` → `industrial/machine/control`
-     * Trigger buzzer + warning lights
+     ```json
+     { "alarm": true }
+     ```
+   * Sent to:
+
+     ```
+     industrial/machine/control
+     ```
+   * ESP32 triggers:
+
+     * 🔴 Red LED
+     * 🔊 Buzzer ON
 
 ---
 
-## System Pipeline
+## Hardware Setup
 
+| Component                    | Pin              | Description                     |                   |
+| ---------------------------- | ---------------- | ------------------------------- | ----------------- |
+| ESP32 Dev Kit                | —                | Main controller                 |                   |
+| Vibration Sensor (SW-18010P) | GPIO 34          | Pulse-based vibration detection |                   |
+| Sound Sensor (KY-037)        | GPIO 35          | Analog sound input              |                   |
+| Buzzer (Active-Low)          | GPIO 13          | Alarm output                    |                   |
+| Red LED                      | GPIO 21          | Danger indicator                |                   |
+| Yellow LED                   | GPIO 22          | Warning indicator               |                   |
+| Green LED                    | GPIO 23          | Safe indicator                  |                   |
+| 4x4 Keypad                   | Rows: 17,5,18,19 | Columns: 15,2,4,16              | Maintenance input |
+
+---
+
+## System Logic (Core Behavior)
+
+### Machine State Decision
+
+```text
+IF vibration == 0 → IDLE
+
+ELSE IF vibration < threshold AND sound < threshold → NORMAL (SAFE)
+
+ELSE IF vibration > threshold AND sound < threshold → WARNING
+
+ELSE IF vibration > 0 AND sound > threshold → ABNORMAL
 ```
-Camera → YOLOv8n Detection → MQTT Publish → ESP32 Processing
-        → Sensor Fusion → Decision Logic → Alarm Trigger
+
+### Alarm Trigger Logic
+
+```text
+IF (Machine == ABNORMAL) AND (Person Detected)
+    → Activate Buzzer + Red LED
+ELSE
+    → No alarm
 ```
 
 ---
 
-## Hardware Component Setup
+## Smart Maintenance Mode (Keypad Control)
 
-| Component                      | Pin / Specification                       | Description                  |
-| ------------------------------ | ----------------------------------------- | ---------------------------- |
-| **ESP32 Dev Kit**              | 3.3V Logic                                | Main controller              |
-| **SW-18010P Vibration Sensor** | GPIO 34                                   | Digital vibration detection  |
-| **KY-037 Sound Sensor**        | GPIO 35                                   | Analog sound level detection |
-| **Active-Low Buzzer**          | GPIO 13                                   | Alarm output                 |
-| **LED Indicators**             | 21 (Red), 22 (Yellow), 23 (Green)         | System status display        |
-| **4×4 Matrix Keypad**          | Rows: 17, 5, 18, 19<br>Cols: 15, 2, 4, 16 | User input interface         |
+The system includes **human-in-the-loop override** via keypad:
+
+| Function            | Password | Action                        |
+| ------------------- | -------- | ----------------------------- |
+| Maintenance Mode | `123C`   | Disable buzzer, Yellow LED ON |
+| System Reset     | `789D`   | Re-enable monitoring          |
+| Clear Input       | `*`      | Clear buffer                  |
+| Confirm           | `#`      | Submit                        |
+
+### Key Logic
+
+* Maintenance mode sets:
+
+  ```
+  overrideActive = true
+  ```
+* Buzzer is **muted even if abnormal**
+* After repair:
+
+  * User enters reset password
+  * System resumes monitoring
+
+---
+
+## MQTT Topics
+
+| Direction    | Topic                          | Description  |
+| ------------ | ------------------------------ | ------------ |
+| ESP32 → Edge | `industrial/machine/telemetry` | Sensor data  |
+| Edge → ESP32 | `industrial/machine/control`   | Alarm signal |
 
 ---
 
 ## Getting Started
 
-### 1. ESP32 Firmware Setup
+### 1️. ESP32 Firmware Setup
 
-Before compiling, you must create a secure configuration file:
-
-#### Create `secret.h`
+Create a **`secrets.h`** file:
 
 ```cpp
-#ifndef SECRET_H
-#define SECRET_H
+#ifndef SECRETS_H
+#define SECRETS_H
 
-// Wi-Fi Credentials
-const char* SECRET_SSID = "YOUR_WIFI_NAME";
-const char* SECRET_PASS = "YOUR_WIFI_PASSWORD";
-
-// MQTT Broker IP Address
-const char* SECRET_MQTT = "192.168.X.X";
+#define WIFI_SSID "YOUR_WIFI"
+#define WIFI_PASSWORD "YOUR_PASSWORD"
+#define MQTT_SERVER "192.168.X.X"
+#define MQTT_PORT 1883
 
 #endif
 ```
 
-Place this file in the same directory as your `.ino` file.
-
-#### Include in your code
+Include it in your `.ino`:
 
 ```cpp
-#include "secret.h"
+#include "secrets.h"
 ```
-
-#### Upload
-
-* Open Arduino IDE
-* Select ESP32 board
-* Compile & upload
 
 ---
 
-### 2. Edge AI Host Setup (Python)
+### 2️. Python Edge AI Setup
 
-#### Install dependencies
+Install dependencies:
 
 ```bash
 pip install opencv-python ultralytics paho-mqtt
 ```
 
-#### Configure MQTT
-
-Ensure this matches your ESP32:
-
-```python
-MQTT_BROKER = "192.168.X.X"
-```
-
-#### Run system
+Run system:
 
 ```bash
 python edge_controller.py
@@ -130,89 +187,30 @@ python edge_controller.py
 
 ---
 
-### 3️. MQTT Broker
-
-Run Mosquitto locally:
-
-```bash
-mosquitto
-```
-
----
-
-## Decision Logic (Core Intelligence)
-
-The system uses **multi-modal validation**:
-
-| Condition | Requirement                  |
-| --------- | ---------------------------- |
-| Vision    | Person detected (conf > 0.5) |
-| Vibration | Machine movement detected    |
-| Sound     | Above threshold              |
-
-### Trigger Rule
-
-```
-IF (Person Detected)
-AND (Vibration = TRUE)
-AND (Sound > Threshold)
-→ ACTIVATE ALARM
-```
-
-### Noise Rejection
-
-```
-IF (Sound ONLY)
-AND (No Vibration)
-→ IGNORE (environment noise)
-```
-
----
-
-## Smart Maintenance Mode
-
-The system supports safe manual override using the keypad:
-
-| Code   | Function                                            |
-| ------ | --------------------------------------------------- |
-| `123A` | Enable Maintenance Mode (Disable alarm, Yellow LED) |
-| `789C` | Re-arm system (Return to normal operation)          |
-| `*`    | Clear keypad input                                  |
-
-### Maintenance Behavior
-
-* Alarm is muted
-* Vision triggers ignored
-* System remains powered and monitored
-* Visual indicator switches to **Yellow state**
-
----
-
 ## Performance Summary
 
-| Metric     | Value                     |
-| ---------- | ------------------------- |
-| FPS        | ~9.5                      |
-| Resolution | 640×480                   |
-| Model      | YOLOv8n                   |
-| Accuracy   | ~85–90% (normal lighting) |
-| Latency    | Low (real-time capable)   |
+| Feature         | Value        |
+| --------------- | ------------ |
+| Camera FPS      | ~9.5 FPS     |
+| Detection Model | YOLOv8n      |
+| Sensor Cycle    | 1000 ms      |
+| Communication   | MQTT         |
+| Latency         | ~1–2 seconds |
 
 ---
 
-## Design Highlights
+## Key Highlights
 
-* ✅ Edge AI + Embedded integration
-* ✅ Real-time processing pipeline
-* ✅ Multi-sensor fusion (Vision + Sound + Vibration)
-* ✅ False-positive reduction logic
-* ✅ Secure credential handling (`secret.h`)
-* ✅ Human-in-the-loop override system
+* ✅ Multi-sensor fusion (vibration + sound + vision)
+* ✅ Intelligent noise filtering
+* ✅ Real-time edge AI inference
+* ✅ Human-safe maintenance override
+* ✅ MQTT-based scalable architecture
 
 ---
 
 ## Conclusion
 
-This project demonstrates a **complete Edge AI safety system**, integrating real-time object detection with embedded hardware control. By combining multiple sensing modalities and intelligent decision logic, the system achieves **high reliability while minimizing false alarms**, making it suitable for real-world industrial safety applications.
+This project demonstrates a **robust industrial safety system** that balances automation with human control. By combining **embedded systems, edge AI, and IoT communication**, it delivers reliable hazard detection while avoiding false alarms—making it suitable for real-world deployment in smart factories.
 
 ---
